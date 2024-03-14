@@ -93,21 +93,6 @@ int main(int argc, char** argv) {
     bresenham_line(0, 0, 31, -74 , image, white);
     bresenham_line(0, 0, 57, -57 , image, white);
     bresenham_line(0, 0, 74, -31 , image, white);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
     image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
     image.write_tga_file("output.tga");
     return 0;
