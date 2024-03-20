@@ -114,7 +114,7 @@ void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
 
 int main(int argc, char** argv) {
     TGAImage image(width, height, TGAImage::RGB);
-    model = new Model(R"(C:\Users\64468\Documents\workspace\CG\cpp\tiny\tinyrenderer\obj\african_head.obj)");
+    model = new Model(R"(..\obj\african_head.obj)");
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
         Vec2i screen_coords[3];
