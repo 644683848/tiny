@@ -1,18 +1,18 @@
-#include "tgaimage.h"
 #include <iostream>
-#include <type_traits>
 #include <vector>
 #include "geometry.h"
+#include "model.h"
+#include "tgaimage.h"
 
 const TGAColor white = TGAColor(255, 255, 255, 255);
 const TGAColor red   = TGAColor(255, 0,   0,   255);
 const TGAColor green  = TGAColor(0, 255,   0,   255);
 const TGAColor blue  = TGAColor(0, 0,   255,   255);
+
+Model *model = NULL;
+const int width  = 800;
+const int height = 800;
 void bresenham_line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
-    x0 += 80;
-    y0 += 80;
-    x1 += 80;
-    y1 += 80;
     bool steep = false; 
     if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
         std::swap(x0, y0); 
@@ -32,11 +32,9 @@ void bresenham_line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor co
     for (; x_next <= x1; x_next++) {
         if (steep) {
             image.set(y_next, x_next, color);
-            std::cout << y_next << "," << x_next << std::endl;
         }
         else{
             image.set(x_next, y_next, color);
-            std::cout << x_next << "," << y_next << std::endl;
         }
 
         if (p_next < 0) {
@@ -51,49 +49,82 @@ void bresenham_line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor co
     }
 }
 
+void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
+    bresenham_line(x0, y0, x1, y1, image, color);
+}
+
 void line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color) {
     bresenham_line(v1.u, v1.v, v2.u, v2.v, image, color);
 }
 
-void triangle(Vec2i t0, Vec2i t1, Vec2i t2, TGAImage &image, TGAColor color) { 
-    line(t0, t1, image, color); 
-    line(t1, t2, image, color); 
-    line(t2, t0, image, color); 
+//void triangle(Vec2i* t, TGAImage &image, TGAColor color) {
+//    line(t[0], t[1], image, color);
+//    line(t[1], t[2], image, color);
+//    line(t[2], t[0], image, color);
+//}
+
+
+float crossProduct2D(Vec2i a, Vec2i b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+
+Vec3f barycentric(Vec2i *pts, Vec2i P) {
+    // 设pts[0], pts[1], pts[2]分别为A, B, C点
+    Vec2i A = pts[0];
+    Vec2i B = pts[1];
+    Vec2i C = pts[2];
+    Vec2i AB = Vec2i(B.x - A.x, B.y - A.y);
+    Vec2i BC = Vec2i(C.x - B.x, C.y - B.y);
+    Vec2i PB = Vec2i(B.x - P.x, B.y - P.y);
+    Vec2i PC = Vec2i(C.x - P.x, C.y - P.y);
+    Vec2i CA = Vec2i(A.x - C.x, A.y - C.y);
+    // 总面积为AB X BC
+    float S_ABC = crossProduct2D(AB, BC);
+    // 所有三角形都是逆时针，否则会出错
+    float i = crossProduct2D(PB, BC) / S_ABC;
+    float j = crossProduct2D(PC, CA) / S_ABC;
+    float k = 1 - i - j;
+    return {i , j, k};
+}
+
+
+
+void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
+    Vec2i bboxmin(image.get_width()-1,  image.get_height()-1);
+    Vec2i bboxmax(0, 0);
+    Vec2i clamp(image.get_width()-1, image.get_height()-1);
+    for (int i=0; i<3; i++) {
+        bboxmin.x = std::max(0, std::min(bboxmin.x, pts[i].x));
+        bboxmin.y = std::max(0, std::min(bboxmin.y, pts[i].y));
+
+        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, pts[i].x));
+        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, pts[i].y));
+    }
+    Vec2i P;
+    for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
+        for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
+            Vec3f bc_screen  = barycentric(pts, P);
+            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
+            image.set(P.x, P.y, color);
+        }
+    }
 }
 
 
 int main(int argc, char** argv) {
-    TGAImage image(800, 800, TGAImage::RGB);
-    // Vec2i t0[3] = {Vec2i(10, 70),   Vec2i(50, 160),  Vec2i(70, 80)}; 
-    // Vec2i t1[3] = {Vec2i(180, 50),  Vec2i(150, 1),   Vec2i(70, 180)}; 
-    // Vec2i t2[3] = {Vec2i(180, 150), Vec2i(120, 160), Vec2i(130, 180)}; 
-    // triangle(t0[0], t0[1], t0[2], image, red); 
-    // triangle(t1[0], t1[1], t1[2], image, white); 
-    // triangle(t2[0], t2[1], t2[2], image, green);
-    // bresenham_line(10, 70, 50, 160, image, TGAColor(255, 0,   0,   255));
-    // bresenham_line(50, 160, 70, 80, image, white);
-    // bresenham_line(0, 80, 20, 160, image, white);
-    // bresenham_line(50, 160, 200, 100, image, white);
-    // bresenham_line(50, 160, 100, 50, image, white);
-    // bresenham_line(70, 80, 10, 70, image, blue);
-    // bresenham_line(50, 160, 70, 80, image, red);
-    bresenham_line(0, 0, 80 , 0  , image, white);
-    bresenham_line(0, 0, 74 , 31 , image, white);
-    bresenham_line(0, 0, 57 , 57 , image, white);
-    bresenham_line(0, 0, 31 , 74 , image, white);
-    bresenham_line(0, 0, 0, 80   , image, white);
-    bresenham_line(0, 0, -31, 74 , image, white);
-    bresenham_line(0, 0, -57, 57 , image, white);
-    bresenham_line(0, 0, -74, 31 , image, white);
-    bresenham_line(0, 0, -80, 0  , image, white);
-    bresenham_line(0, 0, -74, -31, image, white);
-    bresenham_line(0, 0, -57, -57, image, white);
-    bresenham_line(0, 0, -31, -74, image, white);
-    bresenham_line(0, 0, 0, -80  , image, white);
-    bresenham_line(0, 0, 31, -74 , image, white);
-    bresenham_line(0, 0, 57, -57 , image, white);
-    bresenham_line(0, 0, 74, -31 , image, white);
+    TGAImage image(width, height, TGAImage::RGB);
+    model = new Model(R"(C:\Users\64468\Documents\workspace\CG\cpp\tiny\tinyrenderer\obj\african_head.obj)");
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec2i screen_coords[3];
+        for (int j=0; j<3; j++) {
+            Vec3f world_coords = model->vert(face[j]);
+            screen_coords[j] = Vec2i((world_coords.x+1.)*width/2., (world_coords.y+1.)*height/2.);
+        }
+        triangle(screen_coords, image, TGAColor(rand()%255, rand()%255, rand()%255, 255));
+    }
     image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
     image.write_tga_file("output.tga");
-    return 0;
+    delete model;
 }

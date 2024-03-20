@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.0)
 project(TGAImageExample)
 
-find_package(Eigen3 REQUIRED)
-include_directories(EIGEN3_INCLUDE_DIR)
+#find_package(Eigen3 REQUIRED)
+#include_directories(EIGEN3_INCLUDE_DIR)
 
 # Add the executable
-add_executable(TGAImageExample main.cpp tgaimage.cpp)
+add_executable(TGAImageExample main.cpp tgaimage.cpp model.cpp)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 11)

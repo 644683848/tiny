@@ -1,1 +1,0 @@
-/usr/bin/g++ -g -rdynamic CMakeFiles/TGAImageExample.dir/main.cpp.o CMakeFiles/TGAImageExample.dir/tgaimage.cpp.o -o TGAImageExample 
