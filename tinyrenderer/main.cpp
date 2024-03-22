@@ -68,6 +68,13 @@ float crossProduct2D(Vec2i a, Vec2i b) {
     return a.x * b.y - a.y * b.x;
 }
 
+Vec3f crossProduct3D(Vec3f v1, Vec3f v2) {
+    float x = v1.y * v2.z - v1.z * v2.y;
+    float y = v1.z * v2.x - v1.x * v2.z;
+    float z = v1.x * v2.y - v1.y * v2.x;
+    return {x, y ,z};
+}
+
 
 Vec3f barycentric(Vec2i *pts, Vec2i P) {
     // 设pts[0], pts[1], pts[2]分别为A, B, C点
@@ -81,7 +88,7 @@ Vec3f barycentric(Vec2i *pts, Vec2i P) {
     Vec2i CA = Vec2i(A.x - C.x, A.y - C.y);
     // 总面积为AB X BC
     float S_ABC = crossProduct2D(AB, BC);
-    // 所有三角形都是逆时针，否则会出错
+    // 计算面积时，以逆时针为准
     float i = crossProduct2D(PB, BC) / S_ABC;
     float j = crossProduct2D(PC, CA) / S_ABC;
     float k = 1 - i - j;
@@ -115,14 +122,23 @@ void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
 int main(int argc, char** argv) {
     TGAImage image(width, height, TGAImage::RGB);
     model = new Model(R"(..\obj\african_head.obj)");
+    Vec3f light_dir(0,0,-1); // 光照方向，用来跟三角形法线计算亮度
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
         Vec2i screen_coords[3];
+        Vec3f world_coords[3];
         for (int j=0; j<3; j++) {
-            Vec3f world_coords = model->vert(face[j]);
-            screen_coords[j] = Vec2i((world_coords.x+1.)*width/2., (world_coords.y+1.)*height/2.);
+            world_coords[j] = model->vert(face[j]);
+            screen_coords[j] = Vec2i((world_coords[j].x+1.)*width/2., (world_coords[j].y+1.)*height/2.);
         }
-        triangle(screen_coords, image, TGAColor(rand()%255, rand()%255, rand()%255, 255));
+        Vec3f normal_to_the_triangle = crossProduct3D(world_coords[1] - world_coords[2], world_coords[0] - world_coords[1]);
+        normal_to_the_triangle.normalize();
+        // 计算与法线的点积，同向时光照最亮
+        float intensity = normal_to_the_triangle * light_dir;
+        if (intensity > 0) { // 夹角超过九十度表示光照不到，舍弃即可
+            triangle(screen_coords, image, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255));
+        }
+
     }
     image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
     image.write_tga_file("output.tga");
