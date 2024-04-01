@@ -12,6 +12,10 @@ const TGAColor blue  = TGAColor(0, 0,   255,   255);
 Model *model = NULL;
 const int width  = 800;
 const int height = 800;
+const int depth  = 255;
+float *z_buffer = NULL;
+Vec3f light_dir(0,0,-1); // 光照方向，用来跟三角形法线计算亮度
+
 void bresenham_line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
     bool steep = false; 
     if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
@@ -54,7 +58,7 @@ void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
 }
 
 void line(Vec2i v1, Vec2i v2, TGAImage &image, TGAColor color) {
-    bresenham_line(v1.u, v1.v, v2.u, v2.v, image, color);
+    bresenham_line(v1.x, v1.y, v2.x, v2.y, image, color);
 }
 
 //void triangle(Vec2i* t, TGAImage &image, TGAColor color) {
@@ -76,11 +80,11 @@ Vec3f crossProduct3D(Vec3f v1, Vec3f v2) {
 }
 
 
-Vec3f barycentric(Vec2i *pts, Vec2i P) {
+Vec3f barycentric(Vec3f *pts, Vec2i P) {
     // 设pts[0], pts[1], pts[2]分别为A, B, C点
-    Vec2i A = pts[0];
-    Vec2i B = pts[1];
-    Vec2i C = pts[2];
+    Vec2i A = Vec2i(pts[0].x, pts[0].y);
+    Vec2i B = Vec2i(pts[1].x, pts[1].y);
+    Vec2i C = Vec2i(pts[2].x, pts[2].y);
     Vec2i AB = Vec2i(B.x - A.x, B.y - A.y);
     Vec2i BC = Vec2i(C.x - B.x, C.y - B.y);
     Vec2i PB = Vec2i(B.x - P.x, B.y - P.y);
@@ -97,23 +101,38 @@ Vec3f barycentric(Vec2i *pts, Vec2i P) {
 
 
 
-void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
+void triangle(Vec3f *pts, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGAImage &image, float intensity, float *z_buffer) {
     Vec2i bboxmin(image.get_width()-1,  image.get_height()-1);
     Vec2i bboxmax(0, 0);
     Vec2i clamp(image.get_width()-1, image.get_height()-1);
     for (int i=0; i<3; i++) {
-        bboxmin.x = std::max(0, std::min(bboxmin.x, pts[i].x));
-        bboxmin.y = std::max(0, std::min(bboxmin.y, pts[i].y));
+        bboxmin.x = std::max(0, std::min(bboxmin.x, int(pts[i].x)));
+        bboxmin.y = std::max(0, std::min(bboxmin.y, int(pts[i].y)));
 
-        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, pts[i].x));
-        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, pts[i].y));
+        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, int(pts[i].x)));
+        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, int(pts[i].y)));
     }
     Vec2i P;
+    Vec2i uvP;
     for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
             Vec3f bc_screen  = barycentric(pts, P);
             if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
-            image.set(P.x, P.y, color);
+            float tmp = 0;
+            for (int i = 0; i < 3; i++) {
+                if (i == 0) tmp += pts[i].z * bc_screen.x;
+                else if (i == 1) tmp += pts[i].z * bc_screen.y;
+                else tmp += pts[i].z * bc_screen.z;
+            }
+            uvP.x = uv0.x * bc_screen.x + uv1.x * bc_screen.y + uv2.x * bc_screen.z;
+            uvP.y = uv0.y * bc_screen.x + uv1.y * bc_screen.y + uv2.y * bc_screen.z;
+            if (z_buffer[int(P.x+P.y*width)] < tmp) {
+                z_buffer[int(P.x+P.y*width)] = tmp;
+                TGAColor texture_color = model->diffuse(uvP);
+                intensity = 1;
+                TGAColor color = TGAColor(intensity * texture_color.r, intensity * texture_color.g, intensity * texture_color.b);
+                image.set(P.x, P.y, color);
+            }
         }
     }
 }
@@ -122,21 +141,29 @@ void triangle(Vec2i *pts, TGAImage &image, TGAColor color) {
 int main(int argc, char** argv) {
     TGAImage image(width, height, TGAImage::RGB);
     model = new Model(R"(..\obj\african_head.obj)");
-    Vec3f light_dir(0,0,-1); // 光照方向，用来跟三角形法线计算亮度
+    z_buffer = new float [width*height];
+    for (int i=0; i<width*height; i++) {
+        z_buffer[i] = std::numeric_limits<int>::min();
+    }
+
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
-        Vec2i screen_coords[3];
+        Vec3f screen_coords[3];
         Vec3f world_coords[3];
         for (int j=0; j<3; j++) {
             world_coords[j] = model->vert(face[j]);
-            screen_coords[j] = Vec2i((world_coords[j].x+1.)*width/2., (world_coords[j].y+1.)*height/2.);
+            screen_coords[j] = Vec3f(int((world_coords[j].x+1.)*width/2.+.5), int((world_coords[j].y+1.)*height/2.+.5), world_coords[j].z);
         }
         Vec3f normal_to_the_triangle = crossProduct3D(world_coords[1] - world_coords[2], world_coords[0] - world_coords[1]);
         normal_to_the_triangle.normalize();
         // 计算与法线的点积，同向时光照最亮
         float intensity = normal_to_the_triangle * light_dir;
         if (intensity > 0) { // 夹角超过九十度表示光照不到，舍弃即可
-            triangle(screen_coords, image, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255));
+            Vec2i uv[3];
+            for (int k=0; k<3; k++) {
+                uv[k] = model->uv(i, k);
+            }
+            triangle(screen_coords, uv[0], uv[1], uv[2],image, intensity, z_buffer);
         }
 
     }
